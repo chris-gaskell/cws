@@ -1,0 +1,494 @@
+---
+title: "Cold Water Swimming"
+author: "Chris Gaskell"
+date: "29/07/2021"
+output:
+  html_document:
+    df_print: paged
+  word_document: default
+  pdf_document: default
+---
+
+```{r setup, include=T, echo=FALSE, message=FALSE}
+# Global options across code chunks
+knitr::opts_chunk$set(echo = F, fig.width = 9, fig.height = 8, message = F, warning = F)
+
+# Libraries
+library(tidyverse)
+library(scan)
+library(SingleCaseES)
+library(scales)
+library(knitr)
+library(kableExtra)
+library(userfriendlyscience)
+```
+
+```{r libs, include=T, echo=FALSE, message=FALSE}
+
+### Load required packages
+require(userfriendlyscience)
+safeRequire('ggplot2');
+safeRequire('grid');
+safeRequire('gridExtra');
+safeRequire('viridis');
+safeRequire('pander');
+```
+
+```{r data, include=F, results='hide'}
+# Import the data as a csv file from your working directory. 
+dat.long <- read.csv("CWS.csv") # Assuming that your data is stored in long format.
+
+# Separate the nomothetic data
+phq <- dat.long %>% filter(case == "PHQ9")
+
+# Isolate the three idiographic measures
+dat.long <- dat.long %>% filter(case == "SadHappy" | case == "AnxiousCalm" | case == "BoredExcited")
+
+# rename the idiographic variables
+dat.long <- dat.long %>% mutate(
+    case = dplyr::recode(case,  "SadHappy" = "Happy",
+                                "AnxiousCalm" = "Anxious",
+                                "BoredExcited" = "Excited"))
+
+dat.wide <- dat.long %>% spread(case, values) # Just incase we need to work in wide format.
+
+# Make a Single Case Data Frame (special type of data format for working with data in the 'scan' package).
+scdf <- readSC("CWS.csv")
+scdf <- scdf[c(1:3)]
+```
+
+## About
+
+This is an R markdown file to analyse the idiographic data collected from a SCED investigating the effectiveness of behavioural therapy (cold showers and cold water swimming) for major depressive disorder. The design for the study was an A-B-A-C-FU (or Baseline, Intervention 1, Withdrawal, Intervention 2, Follow-Up). The two intervention phases differed in that the former included cold shower, while the latter included both cold showers and cold water swimming. 
+
+The three idiographic variables (i.e. dependent variables) represented self-report measures on a scale of 1-100. These included happiness (or conversely sad); excitement (or boredom); and finally anxiousness (or calmness). Positive change was indicated by an increase in scores for the sad-to-happy and board-to-excited measures, and by a decrease in scores for the calm-to-anxious measure.
+
+An overview of the data structure is as follows: 
+```{r inspect, include=T}
+# Take a look at the data
+#distinct(dat.long, case, phase, .keep_all = T)
+```
+
+```{r overview, include=F, results='hide'}
+#summary(scdf)
+```
+
+# Hypotheses/pair-wise comparisons
+
+Because the current study involved five phases (i.e. A-B-A-C-FU) there was subsequently as large number of potential pairwise comparison combinations which could be made. We selected four pairwise comparisons to fit with the hypotheses of the current study:
+1. That introducing a basic behavioural treatment (i.e. cold showers) would lead to an improvement in depression measures (by comparing baseline with the first behavioural treatment).
+2. That the treatment effects from the initial behavioural treatment would be not be sustained when the treatment is removed (by comparing withdrawal phase with original baseline phase).
+3. That an additive treatment component of cold water swimming would lead to enhanced outcomes when compared with cold showers only (by comparing both treatment phases).
+4. The the effects of treatment would be maintained by introduction of a relapse prevention plan (by comparing treatment 2 with the follow-up phase).
+
+# Descriptive Statistics
+
+Across the fives phases of the three idiographic measures there were no missing values.
+The data-set was therefore complete with no imputation needed.
+The means, standard deviations (SD), and trends are reported in the table.
+
+```{r descriptives, include=T, warning=F, message=F}
+desc <- describeSC(scdf)
+desc <- desc$descriptives
+desc <- desc %>% select(starts_with(c("m.","sd", "tren")))
+desc <- round(desc, 2)
+
+desc <- rename_with(desc, ~ tolower(gsub("m.", "mean_", .x, fixed = TRUE)))
+desc <- rename_with(desc, ~ tolower(gsub("sd.", "sd_", .x, fixed = TRUE)))
+desc <- rename_with(desc, ~ tolower(gsub("trend.", "trend_", .x, fixed = TRUE)))
+
+desc <- desc %>% relocate((ends_with(c("a","b","a2","c","fu"))))
+desc <- as.data.frame(desc)
+
+desc <- t(desc)
+
+knitr::kable(desc) %>% kable_styling("striped") %>%
+  pack_rows("Baseline", 1, 3) %>%
+  pack_rows("Cold Showers", 4, 6)%>%
+  pack_rows("Withdrawal", 7, 9)%>%
+  pack_rows("Cold Water", 10, 12)%>%
+  pack_rows("Follow Up", 13, 15)
+
+```
+
+
+
+
+# Kendall's Tau
+
+```{r tau, include=T, warning=F}
+Tau <- list(
+          A1vsB = tau_u(scdf, phases = c(1,2)),
+          A1vsA2 = tau_u(scdf, phases = c(1,3)),
+          BvsC = tau_u(scdf, phases = c(2,4)),
+          CvsFU = tau_u(scdf, phases = c(4,5))
+                         )
+print(Tau, complete = T)
+```
+
+# Baseline analyses
+
+The trends for the baseline period can be seen visually in the plots and statistically from the table.
+When using Kendall's Tau to measure the trend of the baseline periods there was a significant trend for
+happiness (t = `r round(Tau$A1vsB$table$SadHappy$Tau[2],2)`, p = `r format.pval(Tau$A1vsB$table$SadHappy$p[2], digits = 2, eps = .001)`) but not for
+anxiousness (t = `r round(Tau$A1vsB$table$AnxiousCalm$Tau[2], 2)`, p = `r format.pval(Tau$A1vsB$table$AnxiousCalm$p[2], digits = 2, eps = .001)`) or
+boredom (t = `r round(Tau$A1vsB$table$BoredExcited$Tau[2], 2)`, p = `r format.pval(Tau$A1vsB$table$BoredExcited$p[2], digits = 2, eps = .001)`).
+As the trend for happiness showed a worsening, and the remaining variables did not show a significant trend, there was no need to apply statistical adjustment (i.e. for baseline trend) within the following analyses. 
+
+The baseline and withdrawal phases are visually comparable. In terms of trends shown within the withdrawal period there was no significant trend shown for happiness (t = `r round(Tau$A1vsA2$table$SadHappy$Tau[3],2)`, p = `r format.pval(Tau$A1vsA2$table$SadHappy$p[3], digits = 2, eps = .001)`) or anxiousness (t = `r round(Tau$A1vsA2$table$AnxiousCalm$Tau[3], 2)`, p = `r format.pval(Tau$A1vsA2$table$AnxiousCalm$p[3], digits = 2, eps = .001)`)
+however there was a significant trend for boredom (t = `r round(Tau$A1vsA2$table$BoredExcited$Tau[3], 2)`, p = `r format.pval(Tau$A1vsA2$table$BoredExcited$p[3], digits = 2, eps = .001)`). This indicates that during the withdrawal period there was some level of improvement across the phase.
+
+In terms of level difference, Mann-whittney U tests were computed to determine is there was a statistically significant difference between the baseline and the withdrawal period. For happiness, there was a greater level of happiness shown in the withdrawal phase than the baseline phase. There was no significant difference for the Mann-whittney test for the boredom and anxiousness idiographics. Taken into account, there was small, limited evidence (statistically and visually) for differences between the baseline and withdrawal phases. 
+
+# Non-overlap Statistics
+
+
+```{r batchcalc, include=T, warning=F}
+AvsB <- batch_calc_ES(dat.long, grouping = "case", condition = "phase", outcome = "values",
+         ES = c("PND", "PEM", "NAP"), improvement = "increase",
+         format = "wide", confidence = NULL, baseline_phase = "A", intervention_phase = "B")
+AvsB <-  AvsB %>% as.data.frame(AvsB) %>% 
+          mutate(across(c(2:4), percent, .01)) %>% 
+          mutate(NAP_SE = round(NAP_SE, 2)) %>% 
+          rename(PND = PND_Est, PEM = PEM_Est, NAP = NAP_Est)
+
+AvsA2 = batch_calc_ES(dat.long, grouping = "case", condition = "phase", outcome = "values",
+         ES = c("PND", "PEM", "NAP"), improvement = "increase",
+         format = "wide", confidence = NULL, baseline_phase = "A", intervention_phase = "A2")
+AvsA2 <-  AvsA2 %>% as.data.frame(AvsA2) %>% 
+          mutate(across(c(2:4), percent, .01)) %>% 
+          mutate(NAP_SE = round(NAP_SE, 2)) %>% 
+          rename(PND = PND_Est, PEM = PEM_Est, NAP = NAP_Est)
+
+BvsC = batch_calc_ES(dat.long, grouping = "case", condition = "phase", outcome = "values",
+         ES = c("PND", "PEM", "NAP"), improvement = "increase",
+         format = "wide", confidence = NULL, baseline_phase = "B", intervention_phase = "C")
+BvsC <-  BvsC %>% as.data.frame(BvsC) %>% 
+          mutate(across(c(2:4), percent, .01)) %>% 
+          mutate(NAP_SE = round(NAP_SE, 2)) %>% 
+          rename(PND = PND_Est, PEM = PEM_Est, NAP = NAP_Est)
+ 
+CvsFU = batch_calc_ES(dat.long, grouping = "case", condition = "phase", outcome = "values",
+        ES = c("PND", "PEM", "NAP"), improvement = "decrease",
+        format = "wide", confidence = NULL, baseline_phase = "C", intervention_phase = "FU")
+CvsFU <-  CvsFU %>% as.data.frame(CvsFU) %>% 
+          mutate(across(c(2:4), percent, .01)) %>% 
+          mutate(NAP_SE = round(NAP_SE, 2)) %>% 
+          rename(PND = PND_Est, PEM = PEM_Est, NAP = NAP_Est)                 
+ 
+
+nonover <- list(AvsB = AvsB, AvsA2 = AvsA2, BvsC = BvsC, CvsFU = CvsFU
+                )
+
+nonover
+
+#label_percent()(nonover$AvsB)
+
+#nonover$CvsFU %>% 
+#  mutate(Test=Sepal.Length/45,Test=scales::percent(Test)) #
+#
+#scales::percent(nonover$AvsB[,-1])
+
+```
+
+
+
+```{r apa-plot, include=T}
+plotSC(scdf,
+       phase.names = c('Baseline', 'Cold-water', 'Withdrawal', 'Green spaces', 'Follow-up'),
+       ylab= c("1-100"), # label for the y-axis
+       xlab="Measurement days across the study", # label for the x-axis
+       xinc = 10, # The increment number of the x axis
+     lines=c('trend',lty='dotted',lwd=5,col='red'), # Lines to impose and styling.
+     style=list(fill=TRUE,col.fill="white",pch=20), case.names = c("Happiness", "Anxiety", "Excited")) # Making it look pretty.
+```
+
+
+```{r plot, include=T, fig.height=6, fig.width=13}
+Plot <- ggplot(dat.long, # replace 'dat.long' with your long format data frame.
+          aes(x = mt, y = values)) + # replace x + y with your x and y variables.
+          geom_line(aes(color = case # replace case with name for ideographic measure column.
+                ), size = 1.3) 
+
+Plot <- Plot +
+          scale_color_manual(values = c("Darkgreen", "Darkblue", "red"))+
+          ggtitle("Time series plot to demonstrate change across the three idiographic measures.")+
+          jtools::theme_apa()+
+          ylab("1 to 100 Rating Scale")+
+          xlab("Measurement days across the study")
+
+Plot <- Plot +
+  geom_vline(xintercept = 28, color = "black", size=.25)+
+  geom_vline(xintercept = 70, color = "black", size=.25)+
+  geom_vline(xintercept = 98, color = "black", size=.25)+
+  geom_vline(xintercept = 140, color = "black", size=.25) +
+     annotate("text", x = .5*(0+25), y = 100, label = "Baseline", size=6) +
+     annotate("text", x = .5*(25+70), y = 100, label = "Cold Showers", size=6) +
+     annotate("text", x = .5*(70+98), y = 100, label = "Withdraw", size=6) +
+     annotate("text", x = .5*(98+140), y = 100, label = "Cold Water Swim", size=6) +
+     annotate("text", x = .5*(140+200), y = 100, label = "Follow-up", size=6)
+
+Plot <- Plot +
+  labs(caption = "Note. 100 is equal to (i) high happiness, (ii) high calmness, and (iii) high excitment.") +
+  theme(
+        axis.title=element_text(size=rel(60),face="bold"),
+        plot.caption = element_text(hjust = 0, size = rel(1)),
+        axis.text = element_text(size=rel(2)),
+        plot.title = element_text(size=20),
+        axis.title.x = element_text(size=20, face = "plain"),
+        axis.title.y = element_text(size=20, face = "plain")
+        )
+
+Plot
+```
+
+
+# Regression Analyses
+Both the piecewise and the generalised regression are analyses to determine change between phases. Bi-phasic comaprisons are possible but it does not seemt that more than 2 can be used meaningfully in a single model. The following regression analyses explores change following the introduction of the first intervention (i.e. A vs. B).
+
+
+# Piecewise Regression
+
+```{r pwr-data, fig.height=4}
+# Import data
+wide.dat <- dat.long %>%
+          spread(case, values)
+
+wide.dat <- wide.dat %>%
+          filter(phase == "A" | phase == "B")
+
+pwr_happy <- piecewiseRegr(wide.dat,
+                timeVar='mt', yVar= 'Happy', phaseVar='phase',
+                colors = list(
+                         pre = "red",
+                         post = "red",
+                         diff = "Darkorange",
+                         intervention = "black",
+                         points = "black"),
+                plotLabs = list(
+                            title = "Happiness",
+                                      caption = "Note. 100 is equal to (i) high happiness",
+                                      subtitle = NULL,
+                                      x = NULL,
+                                      y = "Happiness (0-100)"),
+                theme = theme(
+                        panel.background = element_rect(fill = "white",
+                        colour = "lightblue",
+                        size = 0.5, linetype = "solid")),
+                yBreaks = 3
+              )
+
+pwr_bored <- piecewiseRegr(wide.dat,
+                timeVar='mt', yVar= 'Excited', phaseVar='phase',
+                colors = list(
+                         pre = "red",
+                         post = "red",
+                         diff = "Darkorange",
+                         intervention = "black",
+                         points = "black"),
+                plotLabs = list(
+                            title = "Excitement",
+                                      caption = "Note. 100 is equal to (i) high excitement",
+                                      subtitle = NULL,
+                                      x = NULL,
+                                      y = "Excitement (0-100)"),
+                theme = theme(
+                        panel.background = element_rect(fill = "white",
+                        colour = "lightblue",
+                        size = 0.5, linetype = "solid")),
+                yBreaks = 3
+              )
+
+pwr_anxious <- piecewiseRegr(wide.dat,
+                timeVar='mt', yVar= 'Anxious', phaseVar='phase',
+                colors = list(
+                         pre = "red",
+                         post = "red",
+                         diff = "Darkorange",
+                         intervention = "black",
+                         points = "black"),
+                plotLabs = list(
+                            title = "Anxiety",
+                                      caption = "Note. 100 = high anxiety; regression = red line; level change = orange line",
+                                      subtitle = NULL,
+                                      x = NULL,
+                                      y = "Anxiety (0-100)"),
+                theme = theme(
+                        panel.background = element_rect(fill = "white",
+                        colour = "lightblue",
+                        size = 0.5, linetype = "solid")),
+                yBreaks = 3
+              )
+
+
+
+pwr.plots <- list(Happy = pwr_happy$output$plot,
+                   Excited = pwr_bored$output$plot,
+                   Anxious = pwr_anxious$output$plot)
+
+
+```
+
+```{r pwr-table, echo=FALSE, fig.height=4}
+
+pwr_table <- data.frame(
+    "measure" = c("Happy", "Excited", "Anxious"),
+    "D" = c(pwr_happy$output$deviance, pwr_bored$output$deviance, pwr_anxious$output$deviance),
+    "Rsq.null" = c(pwr_happy$output$Rsq.null, pwr_bored$output$Rsq.null, pwr_anxious$output$Rsq.null),
+    "Rsq.mdl" = c(pwr_happy$output$Rsq.model, pwr_bored$output$Rsq.model, pwr_anxious$output$Rsq.model),
+    "ESr" = c(pwr_happy$output$ES, pwr_bored$output$ES, pwr_anxious$output$ES),
+    "Level change" = c(as.numeric(pwr_happy$output$coef[2]), as.numeric(pwr_bored$output$coef[2]), as.numeric(pwr_anxious$output$coef[2]),
+    "Trend change" = c(as.numeric(pwr_happy$output$coef[4]), as.numeric(pwr_bored$output$coef[4]), as.numeric(pwr_anxious$output$coef[4]))
+),
+    "cohensD" = c(pwr_happy$intermediate$meanDiff$meanDiff.d, pwr_bored$intermediate$meanDiff$meanDiff.d, pwr_anxious$intermediate$meanDiff$meanDiff.d)
+)
+
+pwr_table <- pwr_table[1:3,]
+
+pwr_table %>% mutate_at(2:7, round, 2)
+
+```
+
+
+
+
+
+
+
+
+# Generalised Logistic Regression
+
+
+```{r glog-data, echo=FALSE, fig.height=4}
+mycolors <- list("red", "red", "red", "red", "red")
+
+glog.happy <- 
+         genlog(wide.dat,
+         timeVar='mt', yVar= 'Happy', phaseVar='phase',
+         theme = theme(
+                      panel.background = element_rect(fill = "white",
+                      colour = "lightblue",
+                      size = 0.5, linetype = "solid")),
+         alphas = list(outsideRange = .0,
+                       bounds = 0,
+                       points = .0,
+                       mid = 0),
+         yBreaks = 3,
+         colors = list(bottomBound = "black",
+                       topBound = "black",
+                       curve = "red",
+                       mid = "Darkgreen",
+                       intervention = "Darkblue",
+                       points = "black",
+                       outsideRange = "black"),
+         plotLabs = list(title = "Happiness",
+                        caption = "Note. 100 is equal to (i) high happiness",
+                        subtitle = NULL,
+                        x = NULL,
+                        y = "Happiness (0-100)"))
+
+
+glog.bored <- 
+         genlog(wide.dat,
+         timeVar='mt', yVar= 'Excited', phaseVar='phase',
+         theme = theme(
+                      panel.background = element_rect(fill = "white",
+                      colour = "lightblue",
+                      size = 0.5, linetype = "solid")),
+         alphas = list(outsideRange = .0,
+                       bounds = 0,
+                       points = .0,
+                       mid = 0),
+         yBreaks = 3,
+         colors = list(bottomBound = "black",
+                       topBound = "black",
+                       curve = "red",
+                       mid = "Darkgreen",
+                       intervention = "Darkblue",
+                       points = "black",
+                       outsideRange = "black"),
+         plotLabs = list(title = "Excitement",
+                        caption = "Note. 100 is equal to (i) high excitement",
+                        subtitle = NULL,
+                        x = NULL,
+                        y = "Excitement (0-100)"))
+
+glog.anxious <- 
+         genlog(wide.dat,
+         timeVar='mt', yVar= 'Anxious', phaseVar='phase',
+         theme = theme(
+                      panel.background = element_rect(fill = "white",
+                      colour = "lightblue",
+                      size = 0.5, linetype = "solid")),
+         alphas = list(outsideRange = .0,
+                       bounds = 0,
+                       points = .0,
+                       mid = 0),
+         yBreaks = 3,
+         colors = list(bottomBound = "black",
+                       topBound = "black",
+                       curve = "red",
+                       mid = "Darkgreen",
+                       intervention = "Darkblue",
+                       points = "black",
+                       outsideRange = "black"),
+         plotLabs = list(title = "Anxiety",
+                        caption = "Note. 100 = high anxiety; mid point = green line; intervention point = blue line",
+                        subtitle = NULL,
+                        x = NULL,
+                        y = "Anxiety (0-100)"))
+
+
+glog.plots <- list(Happy = glog.happy$output$plot,
+                   Excited = glog.bored$output$plot,
+                   Anxious = glog.anxious$output$plot)
+```
+
+```{r glog-table, echo=FALSE, fig.height=4}
+
+glog.table <- data.frame(
+    "measure" = c("Happy", "Excited", "Anxious"),
+    "D" = c(glog.happy$output$deviance, glog.bored$output$deviance, glog.anxious$output$deviance),
+    "Rsq.null" = c(glog.happy$output$Rsq, glog.bored$output$Rsq, glog.anxious$output$Rsq),
+    "Rsq.mdl" = c(glog.happy$output$ESc, glog.bored$output$ESc, glog.anxious$output$ESc),
+    "ESr" = c(glog.happy$output$ESr, glog.bored$output$ESr, glog.anxious$output$ESr),
+    "growthRate" = c(glog.happy$output$growthRate, glog.bored$output$growthRate, glog.anxious$output$growthRate),
+    "IP" = c(glog.happy$output$inflectionPoint, glog.bored$output$inflectionPoint, glog.anxious$output$inflectionPoint),
+    "base" = c(glog.happy$output$base, glog.bored$output$base, glog.anxious$output$base),
+    "top" = c(glog.happy$output$top, glog.bored$output$top, glog.anxious$output$top)
+
+)
+
+glog.table <- glog.table[1:3,]
+
+glog.table %>% mutate_at(2:7, round, 2)
+
+```
+
+
+
+
+
+```{r plots, echo=FALSE, fig.height=13}
+
+
+                   growplot = ggpubr::ggarrange(pwr.plots$Happy, glog.plots$Happy, pwr.plots$Excited, glog.plots$Excited, pwr.plots$Anxious, glog.plots$Anxious, nrow = 3, ncol = 2)
+                   
+                   growplots = ggpubr::annotate_figure(growplot,
+                                                       top = ggpubr::text_grob("Piecewise regression plots                          Generalised logistic regression plots ", color = "Black", face = "bold", size = 16),
+                                                       bottom = ggpubr::text_grob("Measurement days across the study", color = "Black", face = NULL, size = 14))
+                   
+                   growplots + ggpubr::rotate()
+
+```
+
+
+
+
+
+
+
+
+
+
+

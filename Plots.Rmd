@@ -1,0 +1,127 @@
+---
+title: "Using R to make single-case time series graphs"
+author: "Chris Gaskell"
+date: "01/08/2021"
+output:
+  html_document:
+    df_print: paged
+---
+
+# Getting set-up
+
+First need to load (and if not already install) the package needed for making single case plots.
+
+```{r setup, include=T, message=FALSE}
+# Global options across code chunks
+knitr::opts_chunk$set(echo = T, fig.width = 12)
+
+library(tidyverse) # For data tidying and making plots.
+library(scan) # single case package.
+library(SingleCaseES) # alternative single case package.
+library(jtools) # handy apa7 theme for plots.
+```
+
+
+
+# Import the data
+
+The method that I use for plotting multiple y variables is based on the assumption that your data is stored within long format. The data I am using for this is the cold water swimming SCED.
+
+
+```{r data, include=T, results='hide'}
+# Import the data as a csv file from your working directory. My csv file is set up for long format
+long.dat <- read.csv("CWS.csv") # My csv file is set up for long format
+
+# Isolate the three idiographic measures that was used in this study
+long.dat <- long.dat %>% filter(case == "SadHappy" | case == "AnxiousCalm" | case == "BoredExcited") # You can probably ignore this step
+
+# Make a Single Case Data Frame (special type of data format for working with data in the 'scan' package).
+scdf <- readSC("CWS.csv")
+scdf <- scdf[c(1:3)]
+```
+
+## Make a simple single case plot
+
+There are lots of ways to make nice single case plots. The scan package has function that makes plots very easy to make.
+
+The following method allows you to see time-series plots for all variables saved to your single case data frame.
+
+```{r easy-plots, include=F}
+plotSC(scdf)
+```
+
+To isolate a single variable you just follow your single case data frame by a $ and then your chosen variable name.
+
+```{r easy-plot, include=F}
+plotSC(scdf$SadHappy)
+```
+
+While it is really handy to be able to eye-ball the data in this way the plot still looks pretty ugly (as far as plots go). There are lots of 'arguments' to help customise the plot. Here is some code that I use to make it more in line with APA.
+
+```{r apa-plot, include=F}
+plotSC(scdf$SadHappy,
+       phase.names = c('Baseline', 'Cold-water', 'Withdrawal', 'Green spaces', 'Follow-up'),
+       ylab= "1-100 (100 = Happy)", # label for the y-axis
+       xlab="Measurement days across the study", # label for the x-axis
+       xinc = 10, # The increment number of the x axis
+     lines=c('trend',lty='dotted',lwd=5,col='red'), # Lines to impose and styling.
+     style=list(fill=TRUE,col.fill="white",pch=20)) # Making it look pretty.
+```
+
+
+
+## Multiple y variables in a single plot.
+
+This is a little more tricky. The plotSC function from the scan package (used above) doesen't seem to be able to handle this. If it is important to plot multiple y-variables on a single plot then we need to use a different, more powerful package (ggplot2). Remember that this only works if the y-axis scale is comparable across the variables to be plotted (i.e. you couldn't feasibly combine an intensity measure and a count measure).
+
+Here is a simple plot with multiple y variables
+
+```{r multi-y-plot-simple, include=F}
+# Basic example
+Plot <- ggplot(long.dat, # replace 'long.dat' with your long format data frame.
+          aes(x = mt, y = values)) + # replace x + y with your x and y variables.
+          geom_line(aes(color = case, # replace case with name for ideographic measure column.
+                )) 
+Plot
+
+```
+
+And now to make it look more apa consistent.
+
+```{r multi-y-plot-apa, include=F}
+# Adjust to be more like APA
+
+Plot <- Plot +
+          scale_color_manual(values = c("red", "steelblue", "black"))+
+          jtools::theme_apa()+
+          ylab("1-100 Rating Scale")+
+          xlab("Measurement days across the study")+
+          ggtitle("Time series graph for happy-sad and bored-excited ")
+Plot
+```
+
+And finally to add vertical lines and text to allows readers to distinguish between phases.
+
+```{r multi-y-plot-phases, include=F}
+# Add vertical lines and text to distinguish between phases.
+
+Plot <- Plot +
+  geom_vline(xintercept = 28, color = "black", size=.25)+
+  geom_vline(xintercept = 70, color = "black", size=.25)+
+  geom_vline(xintercept = 98, color = "black", size=.25)+
+  geom_vline(xintercept = 140, color = "black", size=.25) +
+     annotate("text", x = .5*(0+25), y = 100, label = "Baseline", size=4) +
+     annotate("text", x = .5*(25+70), y = 100, label = "CWS", size=4) +
+     annotate("text", x = .5*(70+98), y = 100, label = "Withdraw", size=4) +
+     annotate("text", x = .5*(98+140), y = 100, label = "CWS", size=4) +
+     annotate("text", x = .5*(140+200), y = 100, label = "Follow-up", size=4)
+
+Plot
+```
+
+
+
+
+
+
+
